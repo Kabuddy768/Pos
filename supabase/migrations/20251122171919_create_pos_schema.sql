@@ -184,40 +184,110 @@ CREATE TRIGGER sales_transaction_number
   FOR EACH ROW
   EXECUTE FUNCTION set_transaction_number();
 
--- Trigger: Update product quantity on sale
+-- -- Trigger: Update product quantity on sale
+-- CREATE OR REPLACE FUNCTION update_product_quantity_on_sale()
+-- RETURNS TRIGGER AS $$
+-- DECLARE
+--   seller_id_val UUID;
+-- BEGIN
+--   SELECT seller_id INTO seller_id_val FROM sales WHERE id = NEW.sale_id;
+  
+--   UPDATE products
+--   SET quantity = quantity - NEW.quantity,
+--       updated_at = now()
+--   WHERE id = NEW.product_id;
+  
+--   INSERT INTO stock_adjustments (
+--     product_id, adjustment_type, quantity_change,
+--     previous_quantity, new_quantity, reference_id,
+--     reference_type, adjusted_by
+--   )
+--   SELECT 
+--     NEW.product_id, 'sale', -NEW.quantity,
+--     (p.quantity + NEW.quantity), p.quantity,
+--     NEW.sale_id, 'sale', seller_id_val
+--   FROM products p
+--   WHERE p.id = NEW.product_id;
+  
+--   RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+-- DROP TRIGGER IF EXISTS sale_items_update_stock ON sale_items;
+-- CREATE TRIGGER sale_items_update_stock
+--   AFTER INSERT ON sale_items
+--   FOR EACH ROW
+--   EXECUTE FUNCTION update_product_quantity_on_sale();
+
+-- Drop and recreate the function with SECURITY DEFINER
+-- This allows the function to bypass RLS policies
+
+DROP FUNCTION IF EXISTS update_product_quantity_on_sale() CASCADE;
+
 CREATE OR REPLACE FUNCTION update_product_quantity_on_sale()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SECURITY DEFINER -- This is the key - runs with function owner's privileges
+SET search_path = public
+AS $$
 DECLARE
   seller_id_val UUID;
+  prev_qty INTEGER;
+  new_qty INTEGER;
 BEGIN
-  SELECT seller_id INTO seller_id_val FROM sales WHERE id = NEW.sale_id;
+  -- Get the seller ID from the sale
+  SELECT seller_id INTO seller_id_val 
+  FROM sales 
+  WHERE id = NEW.sale_id;
   
+  -- Get current quantity before update
+  SELECT quantity INTO prev_qty
+  FROM products
+  WHERE id = NEW.product_id;
+  
+  -- Update product quantity
   UPDATE products
   SET quantity = quantity - NEW.quantity,
       updated_at = now()
   WHERE id = NEW.product_id;
   
+  -- Calculate new quantity
+  new_qty := prev_qty - NEW.quantity;
+  
+  -- Insert stock adjustment record
   INSERT INTO stock_adjustments (
-    product_id, adjustment_type, quantity_change,
-    previous_quantity, new_quantity, reference_id,
-    reference_type, adjusted_by
-  )
-  SELECT 
-    NEW.product_id, 'sale', -NEW.quantity,
-    (p.quantity + NEW.quantity), p.quantity,
-    NEW.sale_id, 'sale', seller_id_val
-  FROM products p
-  WHERE p.id = NEW.product_id;
+    product_id, 
+    adjustment_type, 
+    quantity_change,
+    previous_quantity, 
+    new_quantity, 
+    reference_id,
+    reference_type, 
+    adjusted_by
+  ) VALUES (
+    NEW.product_id, 
+    'sale', 
+    -NEW.quantity,
+    prev_qty, 
+    new_qty,
+    NEW.sale_id, 
+    'sale', 
+    seller_id_val
+  );
   
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Recreate the trigger
 DROP TRIGGER IF EXISTS sale_items_update_stock ON sale_items;
+
 CREATE TRIGGER sale_items_update_stock
   AFTER INSERT ON sale_items
   FOR EACH ROW
   EXECUTE FUNCTION update_product_quantity_on_sale();
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION update_product_quantity_on_sale() TO authenticated;
 
 -- Trigger: Update timestamps
 CREATE OR REPLACE FUNCTION update_updated_at()
