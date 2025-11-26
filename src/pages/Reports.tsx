@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Sale, SaleItem, Product } from '@/lib/types';
+import { Sale, SaleItem, Product, Profile } from '@/lib/types';
 import { Button } from '@/components/common/Button';
-import { Input } from '@/components/common/Input';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { BarChart3, TrendingUp, DollarSign, Package } from 'lucide-react';
+import { BarChart3, TrendingUp, DollarSign, Package, Users } from 'lucide-react';
 
 export const Reports = () => {
   const [loading, setLoading] = useState(true);
@@ -12,6 +11,7 @@ export const Reports = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [sellers, setSellers] = useState<Profile[]>([]);
 
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -21,6 +21,7 @@ export const Reports = () => {
     totalTransactions: 0,
     averageTransactionValue: 0,
     byPaymentMethod: { cash: 0, mpesa: 0, card: 0 },
+    bySeller: {} as Record<string, { revenue: number; transactions: number; profit: number }>,
   });
 
   useEffect(() => {
@@ -47,17 +48,23 @@ export const Reports = () => {
         .from('products')
         .select('*');
 
+      const { data: sellersData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'seller');
+
       setSales(salesData || []);
       setSaleItems(itemsData || []);
       setProducts(productsData || []);
+      setSellers(sellersData || []);
 
-      calculateStats(salesData || [], itemsData || []);
+      calculateStats(salesData || [], itemsData || [], sellersData || []);
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateStats = (sales: Sale[], items: SaleItem[]) => {
+  const calculateStats = (sales: Sale[], items: SaleItem[], sellers: Profile[]) => {
     const totalRevenue = sales.reduce((sum, s) => sum + s.total_amount, 0);
     const totalCost = items.reduce((sum, item) => sum + item.cost_price * item.quantity, 0);
     const totalProfit = totalRevenue - totalCost;
@@ -69,6 +76,26 @@ export const Reports = () => {
       card: sales.filter((s) => s.payment_method === 'card').reduce((sum, s) => sum + s.total_amount, 0),
     };
 
+    // Calculate per-seller statistics
+    const bySeller: Record<string, { revenue: number; transactions: number; profit: number }> = {};
+    
+    sellers.forEach((seller) => {
+      const sellerSales = sales.filter((s) => s.seller_id === seller.id);
+      const sellerRevenue = sellerSales.reduce((sum, s) => sum + s.total_amount, 0);
+      
+      // Calculate profit for this seller
+      const sellerSaleIds = sellerSales.map((s) => s.id);
+      const sellerItems = items.filter((item) => sellerSaleIds.includes(item.sale_id));
+      const sellerCost = sellerItems.reduce((sum, item) => sum + item.cost_price * item.quantity, 0);
+      const sellerProfit = sellerRevenue - sellerCost;
+      
+      bySeller[seller.id] = {
+        revenue: sellerRevenue,
+        transactions: sellerSales.length,
+        profit: sellerProfit,
+      };
+    });
+
     setStats({
       totalRevenue,
       totalCost,
@@ -77,6 +104,7 @@ export const Reports = () => {
       totalTransactions: sales.length,
       averageTransactionValue: sales.length > 0 ? totalRevenue / sales.length : 0,
       byPaymentMethod,
+      bySeller,
     });
   };
 
@@ -100,6 +128,14 @@ export const Reports = () => {
     .filter((p) => p.quantity <= p.reorder_point && p.is_active)
     .sort((a, b) => a.quantity - b.quantity)
     .slice(0, 10);
+
+  // Sort sellers by revenue
+  const sortedSellers = sellers
+    .map((seller) => ({
+      ...seller,
+      ...stats.bySeller[seller.id],
+    }))
+    .sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
 
   if (loading) {
     return (
@@ -158,6 +194,52 @@ export const Reports = () => {
           />
         </div>
 
+        {/* Seller Performance Section */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Users size={24} className="text-blue-600" />
+            <h2 className="text-xl font-semibold text-gray-900">Seller Performance</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Seller</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700">Transactions</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700">Revenue</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700">Profit</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-700">Avg/Sale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedSellers.map((seller) => {
+                  const avgSale = seller.transactions > 0 ? seller.revenue / seller.transactions : 0;
+                  return (
+                    <tr key={seller.id} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-semibold text-gray-900">{seller.full_name}</p>
+                          <p className="text-xs text-gray-600">{seller.email}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold">{seller.transactions || 0}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-blue-600">
+                        {formatCurrency(seller.revenue || 0)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-green-600">
+                        {formatCurrency(seller.profit || 0)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-600">
+                        {formatCurrency(avgSale)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Sales by Payment Method</h2>
@@ -196,7 +278,7 @@ export const Reports = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {topProducts.map((product, index) => (
+                  {topProducts.map((product) => (
                     <tr key={product.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="px-4 py-2">
                         <div>

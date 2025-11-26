@@ -7,6 +7,7 @@ import { Dashboard } from '@/pages/Dashboard';
 import { Inventory } from '@/pages/Inventory';
 import { POS } from '@/pages/POS';
 import { Reports } from '@/pages/Reports';
+import { Users } from '@/pages/Users';
 
 function App() {
   const { initialize } = useAuthStore();
@@ -43,6 +44,14 @@ function App() {
           element={
             <ProtectedRoute requiredRole="seller">
               <POS />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <Users />
             </ProtectedRoute>
           }
         />
