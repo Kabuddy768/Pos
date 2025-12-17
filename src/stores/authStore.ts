@@ -33,9 +33,15 @@ export const useAuthStore = create<AuthState>((set) => ({
           .eq('id', session.user.id)
           .maybeSingle();
 
-        if (error) throw error;
+        if (error) {
+          console.error('Profile fetch error:', error);
+          throw error;
+        }
+        
         if (profileData) {
           set({ profile: profileData });
+        } else {
+          console.warn('No profile found for user:', session.user.id);
         }
       }
     } catch (err) {
@@ -49,28 +55,52 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email: string, password: string) => {
     set({ loading: true, error: null });
     try {
+      console.log('Attempting login for:', email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Login error:', error);
+        
+        // Provide user-friendly error messages
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Invalid email or password. Please check your credentials and try again.');
+        } else if (error.message.includes('Email not confirmed')) {
+          throw new Error('Please confirm your email address before logging in.');
+        } else {
+          throw new Error(error.message);
+        }
+      }
 
       if (data.user) {
+        console.log('Login successful for user:', data.user.id);
         set({ user: data.user });
 
-        const { data: profileData } = await supabase
+        // Fetch profile with better error handling
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', data.user.id)
           .maybeSingle();
 
-        if (profileData) {
-          set({ profile: profileData });
+        if (profileError) {
+          console.error('Profile fetch error:', profileError);
+          throw new Error('Failed to load user profile. Please contact support.');
         }
+
+        if (!profileData) {
+          throw new Error('User profile not found. Please contact support to complete your account setup.');
+        }
+
+        console.log('Profile loaded:', profileData);
+        set({ profile: profileData });
       }
     } catch (err: any) {
-      const errorMessage = err.message || 'Login failed';
+      console.error('Login process error:', err);
+      const errorMessage = err.message || 'Login failed. Please try again.';
       set({ error: errorMessage });
       throw err;
     } finally {
@@ -81,14 +111,39 @@ export const useAuthStore = create<AuthState>((set) => ({
   signup: async (email: string, password: string, fullName: string, role: 'admin' | 'seller') => {
     set({ loading: true, error: null });
     try {
+      console.log('Attempting signup for:', email);
+      
+      // Check password length
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters long');
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName,
+            role: role,
+          },
+          emailRedirectTo: undefined, // Don't send confirmation email in development
+        }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Signup error:', error);
+        
+        if (error.message.includes('already registered')) {
+          throw new Error('This email is already registered. Please try logging in instead.');
+        } else {
+          throw new Error(error.message);
+        }
+      }
 
       if (data.user) {
+        console.log('Signup successful for user:', data.user.id);
+        
+        // Create profile
         const { error: profileError } = await supabase
           .from('profiles')
           .insert([{
@@ -99,20 +154,36 @@ export const useAuthStore = create<AuthState>((set) => ({
             is_active: true,
           }]);
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          throw new Error('Account created but profile setup failed. Please contact support.');
+        }
 
-        set({ user: data.user, profile: {
-          id: data.user.id,
-          full_name: fullName,
-          email,
-          role,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }});
+        // Fetch the created profile
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+
+        set({ 
+          user: data.user, 
+          profile: profileData || {
+            id: data.user.id,
+            full_name: fullName,
+            email,
+            role,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
+        });
+
+        console.log('Signup completed successfully');
       }
     } catch (err: any) {
-      const errorMessage = err.message || 'Signup failed';
+      console.error('Signup process error:', err);
+      const errorMessage = err.message || 'Signup failed. Please try again.';
       set({ error: errorMessage });
       throw err;
     } finally {
@@ -123,10 +194,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: async () => {
     set({ loading: true, error: null });
     try {
+      console.log('Logging out...');
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      if (error) {
+        console.error('Logout error:', error);
+        throw error;
+      }
       set({ user: null, profile: null });
+      console.log('Logout successful');
     } catch (err: any) {
+      console.error('Logout process error:', err);
       const errorMessage = err.message || 'Logout failed';
       set({ error: errorMessage });
       throw err;
