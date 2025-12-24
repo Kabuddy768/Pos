@@ -8,6 +8,7 @@ import { Inventory } from '@/pages/Inventory';
 import { POS } from '@/pages/POS';
 import { Reports } from '@/pages/Reports';
 import { Users } from '@/pages/Users';
+import { AcceptInvite } from '@/pages/AcceptInvite';
 
 function App() {
   const { initialize } = useAuthStore();
@@ -19,8 +20,11 @@ function App() {
   return (
     <Router>
       <Routes>
+        {/* Public routes */}
         <Route path="/login" element={<LoginForm />} />
+        <Route path="/invite/:token" element={<AcceptInvite />} />
 
+        {/* Protected routes */}
         <Route
           path="/dashboard"
           element={
@@ -47,6 +51,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/users"
           element={

@@ -8,7 +8,6 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, fullName: string, role: 'admin' | 'seller') => Promise<void>;
   logout: () => Promise<void>;
   initialize: () => Promise<void>;
   clearError: () => void;
@@ -101,89 +100,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (err: any) {
       console.error('Login process error:', err);
       const errorMessage = err.message || 'Login failed. Please try again.';
-      set({ error: errorMessage });
-      throw err;
-    } finally {
-      set({ loading: false });
-    }
-  },
-
-  signup: async (email: string, password: string, fullName: string, role: 'admin' | 'seller') => {
-    set({ loading: true, error: null });
-    try {
-      console.log('Attempting signup for:', email);
-      
-      // Check password length
-      if (password.length < 6) {
-        throw new Error('Password must be at least 6 characters long');
-      }
-
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: role,
-          },
-          emailRedirectTo: undefined, // Don't send confirmation email in development
-        }
-      });
-
-      if (error) {
-        console.error('Signup error:', error);
-        
-        if (error.message.includes('already registered')) {
-          throw new Error('This email is already registered. Please try logging in instead.');
-        } else {
-          throw new Error(error.message);
-        }
-      }
-
-      if (data.user) {
-        console.log('Signup successful for user:', data.user.id);
-        
-        // Create profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([{
-            id: data.user.id,
-            full_name: fullName,
-            email,
-            role,
-            is_active: true,
-          }]);
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-          throw new Error('Account created but profile setup failed. Please contact support.');
-        }
-
-        // Fetch the created profile
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        set({ 
-          user: data.user, 
-          profile: profileData || {
-            id: data.user.id,
-            full_name: fullName,
-            email,
-            role,
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }
-        });
-
-        console.log('Signup completed successfully');
-      }
-    } catch (err: any) {
-      console.error('Signup process error:', err);
-      const errorMessage = err.message || 'Signup failed. Please try again.';
       set({ error: errorMessage });
       throw err;
     } finally {
