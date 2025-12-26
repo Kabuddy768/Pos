@@ -9,7 +9,7 @@ on:
 
 # Environment variables for all jobs
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   SUPABASE_PROJECT_ID: 'cmxaayivtseronirqwec'
 
 jobs:
