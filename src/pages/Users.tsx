@@ -12,7 +12,7 @@ import { Edit2, Trash2, CheckCircle, XCircle, Users as UsersIcon, Mail } from 'l
 
 export const Users = () => {
   const { profile } = useAuthStore();
-  const { invitations, fetchInvitations, loading: _invitationsLoading } = useInvitationStore();
+  const { invitations, fetchInvitations } = useInvitationStore();
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInviteForm, setShowInviteForm] = useState(false);

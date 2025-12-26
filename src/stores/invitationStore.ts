@@ -196,7 +196,7 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
       expiresAt.setDate(expiresAt.getDate() + 7);
 
       // Create invitation
-      const { data: _invitation, error: inviteError } = await supabase
+      const {  error: inviteError } = await supabase
         .from('user_invitations')
         .insert([{
           email,
