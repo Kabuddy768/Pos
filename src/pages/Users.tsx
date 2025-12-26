@@ -8,11 +8,11 @@ import { Input } from '@/components/common/Input';
 import { Modal } from '@/components/common/Modal';
 import { InvitationForm } from '@/components/invitations/InvitationForm';
 import { InvitationList } from '@/components/invitations/InvitationList';
-import { UserPlus, Edit2, Trash2, CheckCircle, XCircle, Users as UsersIcon, Mail } from 'lucide-react';
+import { Edit2, Trash2, CheckCircle, XCircle, Users as UsersIcon, Mail } from 'lucide-react';
 
 export const Users = () => {
   const { profile } = useAuthStore();
-  const { invitations, fetchInvitations, loading: invitationsLoading } = useInvitationStore();
+  const { invitations, fetchInvitations, loading: _invitationsLoading } = useInvitationStore();
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInviteForm, setShowInviteForm] = useState(false);

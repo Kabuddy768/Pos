@@ -1,0 +1,15 @@
+{
+  "tasks": {
+    "dev": "deno run --watch --allow-net --allow-env main.ts"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window"],
+    "strict": true,
+    "allowJs": true,
+    "checkJs": false
+  },
+  "imports": {
+    "https://esm.sh/*": "https://esm.sh/*",
+    "std/": "https://deno.land/std@0.168.0/"
+  }
+}

@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Sale, SaleItem, Product, Profile } from '@/lib/types';
 import { Button } from '@/components/common/Button';
-import { formatCurrency, formatDate } from '@/utils/formatters';
-import { BarChart3, TrendingUp, DollarSign, Package, Users } from 'lucide-react';
+import { formatCurrency,  } from '@/utils/formatters';
+import { BarChart3, TrendingUp, DollarSign, Package, Users,LucideIcon } from 'lucide-react';
 
 export const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('30');
-  const [sales, setSales] = useState<Sale[]>([]);
+  const [, setSales] = useState<Sale[]>([]);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [sellers, setSellers] = useState<Profile[]>([]);
@@ -334,7 +334,7 @@ export const Reports = () => {
 interface StatCardProps {
   title: string;
   value: string;
-  icon: React.ComponentType<{ size: number }>;
+  icon: LucideIcon;
   color: 'blue' | 'green' | 'purple' | 'orange';
 }
 

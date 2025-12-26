@@ -38,7 +38,7 @@ export const POS = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedCategory, _setSelectedCategory] = useState<string>('');
 
   useEffect(() => {
     fetchProducts();

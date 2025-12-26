@@ -1,0 +1,113 @@
+================================================================================
+🏪 POS SYSTEM - YOU'RE INVITED!
+================================================================================
+
+Hello!
+
+{{inviterName}} has invited you to join the POS & Inventory Management System.
+
+INVITATION DETAILS
+--------------------------------------------------------------------------------
+Email:          {{email}}
+Role:           {{roleDisplay}}
+Invited by:     {{inviterName}}
+Expires:        {{expiryDate}}
+
+{{#if message}}
+PERSONAL MESSAGE
+--------------------------------------------------------------------------------
+"{{message}}"
+
+{{/if}}
+ACCEPT YOUR INVITATION
+--------------------------------------------------------------------------------
+To accept this invitation and create your account, please visit:
+
+{{inviteUrl}}
+
+You'll be able to set your password and start using the system immediately.
+
+WHAT YOU CAN DO AS {{roleDisplay}}
+--------------------------------------------------------------------------------
+{{#if isAdmin}}
+As an Administrator, you'll have full access to:
+- Manage inventory and products
+- View all sales and transactions
+- Generate reports and analytics
+- Manage users and permissions
+- Configure system settings
+{{else}}
+As a Seller, you'll be able to:
+- Process sales transactions
+- View product inventory
+- Search for products
+- Complete customer checkouts
+- View your own sales history
+{{/if}}
+
+IMPORTANT INFORMATION
+--------------------------------------------------------------------------------
+⏰ This invitation expires on {{expiryDate}}
+🔒 This link is unique to you and should not be shared
+❓ If you have questions, contact our support team
+
+NEED HELP?
+--------------------------------------------------------------------------------
+Support Email:   support@yourcompany.com
+Help Center:     https://yourcompany.com/help
+Phone:           +1 (555) 123-4567
+
+================================================================================
+
+This invitation was sent to {{email}}
+
+If you didn't expect this invitation, you can safely ignore this email.
+The invitation will expire automatically on {{expiryDate}}.
+
+© 2024 POS System. All rights reserved.
+
+================================================================================
+```
+
+---
+
+## Template Variables (Same as HTML)
+
+- `{{inviterName}}` - Name of person who sent the invitation
+- `{{email}}` - Recipient's email address
+- `{{roleDisplay}}` - Display name of role (`Administrator` or `Seller`)
+- `{{message}}` - Optional personal message
+- `{{inviteUrl}}` - Full invitation URL with token
+- `{{expiryDate}}` - Formatted expiration date
+- `{{isAdmin}}` - Boolean flag to show admin-specific content
+
+---
+
+## Visual Representation
+```
+================================================================================
+🏪 POS SYSTEM - YOU'RE INVITED!
+================================================================================
+
+Hello!
+
+John Doe has invited you to join the POS & Inventory Management System.
+
+INVITATION DETAILS
+--------------------------------------------------------------------------------
+Email:          alice@example.com
+Role:           Administrator
+Invited by:     John Doe
+Expires:        December 31, 2024
+
+PERSONAL MESSAGE
+--------------------------------------------------------------------------------
+"Welcome to the team! Looking forward to working with you."
+
+ACCEPT YOUR INVITATION
+--------------------------------------------------------------------------------
+To accept this invitation and create your account, please visit:
+
+https://yourapp.com/invite/abc123token456
+
+...

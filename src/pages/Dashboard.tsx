@@ -4,9 +4,11 @@ import { useAuthStore } from '@/stores/authStore';
 import { useProductStore } from '@/stores/productStore';
 import { supabase } from '@/lib/supabase';
 import { Sale, SaleItem, Product } from '@/lib/types';
-import { BarChart3, ShoppingCart, Package, TrendingUp, LogOut } from 'lucide-react';
-import { formatCurrency, formatNumber } from '@/utils/formatters';
+import { BarChart3, ShoppingCart, Package, TrendingUp, LogOut,LucideIcon } from 'lucide-react';
+import { formatCurrency } from '@/utils/formatters';
 import { Button } from '@/components/common/Button';
+import { ErrorTest } from '@/components/test/ErrorTest';
+
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -166,6 +168,7 @@ export const Dashboard = () => {
               >
                 User Management
               </Button>
+              <ErrorTest />
             </div>
           )}
         </div>
@@ -177,7 +180,7 @@ export const Dashboard = () => {
 interface StatCardProps {
   title: string;
   value: string | number;
-  icon: React.ComponentType<{ size: number }>;
+  icon: LucideIcon;
   color: 'blue' | 'green' | 'purple' | 'orange';
 }
 

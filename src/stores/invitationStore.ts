@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import {
+  createAppError,
+  logError,
+  getUserFriendlyMessage,
+  isErrorCategory,
+  ErrorCategory,
+} from '@/utils/errorHandling';
 
 export interface Invitation {
   id: string;
@@ -66,8 +73,9 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
 
   fetchInvitations: async () => {
     set({ loading: true, error: null });
+    
     try {
-      const { data, error } = await supabase
+      const { data, error: fetchError } = await supabase
         .from('user_invitations')
         .select(`
           *,
@@ -75,17 +83,33 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
         `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (fetchError) {
+        const appError = createAppError(fetchError, {
+          action: 'fetchInvitations',
+          component: 'invitationStore',
+        });
+        logError(appError);
+        throw new Error(getUserFriendlyMessage(fetchError));
+      }
 
       const invitations = (data || []).map((inv: any) => ({
         ...inv,
         inviter_name: inv.inviter?.full_name,
       }));
 
-      set({ invitations });
+      set({ invitations, error: null });
+      
     } catch (err: any) {
-      console.error('Fetch invitations error:', err);
-      set({ error: err.message || 'Failed to fetch invitations' });
+      const appError = createAppError(err, {
+        action: 'fetchInvitations',
+        component: 'invitationStore',
+      });
+      logError(appError);
+      
+      const errorMessage = err.message || getUserFriendlyMessage(err);
+      set({ error: errorMessage });
+      throw err;
+      
     } finally {
       set({ loading: false });
     }
@@ -93,25 +117,53 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
 
   sendInvitation: async (email: string, role: 'admin' | 'seller', message?: string) => {
     set({ loading: true, error: null });
+    
     try {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
       // Check if user already exists
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile, error: profileCheckError } = await supabase
         .from('profiles')
         .select('email')
         .eq('email', email)
         .maybeSingle();
+
+      if (profileCheckError) {
+        const appError = createAppError(profileCheckError, {
+          action: 'sendInvitation',
+          step: 'checkExistingProfile',
+          email,
+        });
+        logError(appError);
+        
+        // Don't throw on profile check error, continue with invitation
+        console.warn('Could not check for existing profile:', profileCheckError);
+      }
 
       if (existingProfile) {
         throw new Error('A user with this email already exists');
       }
 
       // Check if there's already a pending invitation
-      const { data: existingInvite } = await supabase
+      const { data: existingInvite, error: inviteCheckError } = await supabase
         .from('user_invitations')
         .select('id, status')
         .eq('email', email)
         .eq('status', 'pending')
         .maybeSingle();
+
+      if (inviteCheckError) {
+        const appError = createAppError(inviteCheckError, {
+          action: 'sendInvitation',
+          step: 'checkExistingInvite',
+          email,
+        });
+        logError(appError);
+      }
 
       if (existingInvite) {
         throw new Error('There is already a pending invitation for this email');
@@ -121,21 +173,32 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
       const { data: tokenData, error: tokenError } = await supabase
         .rpc('generate_invite_token');
 
-      if (tokenError) throw tokenError;
+      if (tokenError) {
+        const appError = createAppError(tokenError, {
+          action: 'sendInvitation',
+          step: 'generateToken',
+          email,
+        });
+        logError(appError);
+        throw new Error('Failed to generate invitation token. Please try again.');
+      }
+
       const token = tokenData as string;
 
       // Get current user ID
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) {
+        throw new Error('Not authenticated. Please log in and try again.');
+      }
 
       // Set expiration to 7 days from now
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
 
       // Create invitation
-      const { data: invitation, error: inviteError } = await supabase
+      const { data: _invitation, error: inviteError } = await supabase
         .from('user_invitations')
-        .insert([{
+        .cd ([{
           email,
           role,
           invited_by: user.id,
@@ -147,25 +210,76 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
         .select()
         .single();
 
-      if (inviteError) throw inviteError;
+      if (inviteError) {
+        const appError = createAppError(inviteError, {
+          action: 'sendInvitation',
+          step: 'createInvitation',
+          email,
+          role,
+        });
+        logError(appError);
+
+        if (isErrorCategory(inviteError, ErrorCategory.CONFLICT)) {
+          throw new Error('An invitation for this email already exists');
+        }
+        
+        throw new Error(getUserFriendlyMessage(inviteError));
+      }
 
       // Refresh invitations list
-      await get().fetchInvitations();
+await get().fetchInvitations();
 
-      // TODO: Send email with invitation link
-      // This would require email service integration
-      console.log('Invitation created:', {
-        email,
-        token,
-        inviteUrl: `${window.location.origin}/accept-invite/${token}`
-      });
+// Send email via Edge Function
+try {
+  console.log('Sending invitation email via Edge Function...');
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  const inviterName = user?.user_metadata?.full_name || 'Admin';
 
-      return token;
+  const {data, error} = await supabase.functions.invoke('send-invitation-email', {
+    body: {
+      to: email,
+      inviterName,
+      role,
+      inviteToken: token,
+      message: message || undefined,
+      expiresAt: expiresAt.toISOString(),
+    },
+  });
+
+  if (error) {
+    console.error('Failed to send email:', error);
+    // Don't throw - invitation is created, just email failed
+    console.warn('Invitation created but email sending failed. Please share the link manually.');
+  } else if (data && !data.success) {
+    // Check if the function returned an error in the response body
+    console.error('Email sending failed:', data.error);
+    console.warn('Invitation created but email sending failed. Please share the link manually.');
+  } else {
+    console.log('Email sent successfully:', data);
+  }
+} catch (emailError: any) {
+  console.error('Error sending invitation email:', emailError);
+  // Don't throw - invitation is already created
+  console.warn('Invitation created but email sending failed. Please share the link manually.');
+}
+
+set({ error: null });
+return token;
+      
     } catch (err: any) {
-      console.error('Send invitation error:', err);
-      const errorMessage = err.message || 'Failed to send invitation';
+      const appError = createAppError(err, {
+        action: 'sendInvitation',
+        component: 'invitationStore',
+        email,
+        role,
+      });
+      logError(appError);
+      
+      const errorMessage = err.message || getUserFriendlyMessage(err);
       set({ error: errorMessage });
       throw new Error(errorMessage);
+      
     } finally {
       set({ loading: false });
     }
@@ -173,10 +287,21 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
 
   validateToken: async (token: string) => {
     try {
-      const { data, error } = await supabase
+      if (!token || token.trim() === '') {
+        throw new Error('Invalid invitation token');
+      }
+
+      const { data, error: validateError } = await supabase
         .rpc('validate_invite_token', { token });
 
-      if (error) throw error;
+      if (validateError) {
+        const appError = createAppError(validateError, {
+          action: 'validateToken',
+          component: 'invitationStore',
+        });
+        logError(appError);
+        return { is_valid: false };
+      }
 
       if (!data || data.length === 0) {
         return { is_valid: false };
@@ -191,8 +316,13 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
         invited_by_name: validation.invited_by_name,
         expires_at: validation.expires_at,
       };
+      
     } catch (err: any) {
-      console.error('Validate token error:', err);
+      const appError = createAppError(err, {
+        action: 'validateToken',
+        component: 'invitationStore',
+      });
+      logError(appError);
       return { is_valid: false };
     }
   },
@@ -203,7 +333,17 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
     phone?: string;
   }) => {
     set({ loading: true, error: null });
+    
     try {
+      // Validate inputs
+      if (!userData.fullName || userData.fullName.trim() === '') {
+        throw new Error('Full name is required');
+      }
+
+      if (!userData.password || userData.password.length < 6) {
+        throw new Error('Password must be at least 6 characters');
+      }
+
       // Validate token first
       const validation = await get().validateToken(token);
       
@@ -223,8 +363,19 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
         },
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user account');
+      if (authError) {
+        const appError = createAppError(authError, {
+          action: 'acceptInvitation',
+          step: 'createAuthUser',
+          email: validation.email,
+        });
+        logError(appError);
+        throw new Error(getUserFriendlyMessage(authError));
+      }
+
+      if (!authData.user) {
+        throw new Error('Failed to create user account');
+      }
 
       // Create profile
       const { error: profileError } = await supabase
@@ -238,7 +389,15 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
           is_active: true,
         }]);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        const appError = createAppError(profileError, {
+          action: 'acceptInvitation',
+          step: 'createProfile',
+          userId: authData.user.id,
+        });
+        logError(appError);
+        throw new Error('Failed to create user profile. Please contact support.');
+      }
 
       // Mark invitation as accepted
       const { error: markError } = await supabase
@@ -248,15 +407,26 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
         });
 
       if (markError) {
-        console.error('Failed to mark invitation as accepted:', markError);
+        const appError = createAppError(markError, {
+          action: 'acceptInvitation',
+          step: 'markAccepted',
+          userId: authData.user.id,
+        });
+        logError(appError);
         // Don't throw error here as user is already created
+        console.warn('Failed to mark invitation as accepted:', markError);
       }
 
-      // User is now logged in automatically
-      set({ loading: false });
+      set({ loading: false, error: null });
+      
     } catch (err: any) {
-      console.error('Accept invitation error:', err);
-      const errorMessage = err.message || 'Failed to accept invitation';
+      const appError = createAppError(err, {
+        action: 'acceptInvitation',
+        component: 'invitationStore',
+      });
+      logError(appError);
+      
+      const errorMessage = err.message || getUserFriendlyMessage(err);
       set({ error: errorMessage, loading: false });
       throw new Error(errorMessage);
     }
@@ -264,16 +434,28 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
 
   resendInvitation: async (invitationId: string) => {
     set({ loading: true, error: null });
+    
     try {
       // Get the invitation
       const invitation = get().invitations.find(inv => inv.id === invitationId);
-      if (!invitation) throw new Error('Invitation not found');
+      if (!invitation) {
+        throw new Error('Invitation not found');
+      }
 
       // Generate new token
       const { data: tokenData, error: tokenError } = await supabase
         .rpc('generate_invite_token');
 
-      if (tokenError) throw tokenError;
+      if (tokenError) {
+        const appError = createAppError(tokenError, {
+          action: 'resendInvitation',
+          step: 'generateToken',
+          invitationId,
+        });
+        logError(appError);
+        throw new Error('Failed to generate new token');
+      }
+
       const newToken = tokenData as string;
 
       // Extend expiration
@@ -291,22 +473,65 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
         })
         .eq('id', invitationId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        const appError = createAppError(updateError, {
+          action: 'resendInvitation',
+          step: 'updateInvitation',
+          invitationId,
+        });
+        logError(appError);
+        throw new Error(getUserFriendlyMessage(updateError));
+      }
 
-      // Refresh list
-      await get().fetchInvitations();
+    // Refresh list
+await get().fetchInvitations();
 
-      // TODO: Send new email
-      console.log('Invitation resent:', {
-        email: invitation.email,
-        token: newToken,
-        inviteUrl: `${window.location.origin}/invite/${newToken}`
-      });
+// Send email via Edge Function
+try {
+  console.log('Sending invitation email via Edge Function...');
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  const inviterName = user?.user_metadata?.full_name || 'Admin';
+
+  const {data,error} = await supabase.functions.invoke('send-invitation-email', {
+    body: {
+      to: invitation.email,
+      inviterName,
+      role: invitation.role,
+      inviteToken: newToken,
+      message: invitation.message || undefined,
+      expiresAt: newExpiresAt.toISOString(),
+    },
+  });
+
+  if (error) {
+    console.error('Failed to send email:', error);
+    console.warn('Invitation resent but email sending failed. Please share the link manually.');
+  } else if (data && !data.success) {
+    console.error('Email resending failed:', data.error);
+    console.warn('Invitation resent but email sending failed. Please share the link manually.');
+  } else {
+    console.log('Email resent successfully:', data);
+  }
+} catch (emailError: any) {
+  console.error('Error sending invitation email:', emailError);
+  console.warn('Invitation resent but email sending failed. Please share the link manually.');
+}
+
+set({ error: null });
+      
     } catch (err: any) {
-      console.error('Resend invitation error:', err);
-      const errorMessage = err.message || 'Failed to resend invitation';
+      const appError = createAppError(err, {
+        action: 'resendInvitation',
+        component: 'invitationStore',
+        invitationId,
+      });
+      logError(appError);
+      
+      const errorMessage = err.message || getUserFriendlyMessage(err);
       set({ error: errorMessage });
       throw new Error(errorMessage);
+      
     } finally {
       set({ loading: false });
     }
@@ -314,8 +539,9 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
 
   revokeInvitation: async (invitationId: string) => {
     set({ loading: true, error: null });
+    
     try {
-      const { error } = await supabase
+      const { error: revokeError } = await supabase
         .from('user_invitations')
         .update({
           status: 'revoked',
@@ -323,15 +549,31 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
         })
         .eq('id', invitationId);
 
-      if (error) throw error;
+      if (revokeError) {
+        const appError = createAppError(revokeError, {
+          action: 'revokeInvitation',
+          invitationId,
+        });
+        logError(appError);
+        throw new Error(getUserFriendlyMessage(revokeError));
+      }
 
       // Refresh list
       await get().fetchInvitations();
+      set({ error: null });
+      
     } catch (err: any) {
-      console.error('Revoke invitation error:', err);
-      const errorMessage = err.message || 'Failed to revoke invitation';
+      const appError = createAppError(err, {
+        action: 'revokeInvitation',
+        component: 'invitationStore',
+        invitationId,
+      });
+      logError(appError);
+      
+      const errorMessage = err.message || getUserFriendlyMessage(err);
       set({ error: errorMessage });
       throw new Error(errorMessage);
+      
     } finally {
       set({ loading: false });
     }
@@ -339,21 +581,38 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
 
   deleteInvitation: async (invitationId: string) => {
     set({ loading: true, error: null });
+    
     try {
-      const { error } = await supabase
+      const { error: deleteError } = await supabase
         .from('user_invitations')
         .delete()
         .eq('id', invitationId);
 
-      if (error) throw error;
+      if (deleteError) {
+        const appError = createAppError(deleteError, {
+          action: 'deleteInvitation',
+          invitationId,
+        });
+        logError(appError);
+        throw new Error(getUserFriendlyMessage(deleteError));
+      }
 
       // Refresh list
       await get().fetchInvitations();
+      set({ error: null });
+      
     } catch (err: any) {
-      console.error('Delete invitation error:', err);
-      const errorMessage = err.message || 'Failed to delete invitation';
+      const appError = createAppError(err, {
+        action: 'deleteInvitation',
+        component: 'invitationStore',
+        invitationId,
+      });
+      logError(appError);
+      
+      const errorMessage = err.message || getUserFriendlyMessage(err);
       set({ error: errorMessage });
       throw new Error(errorMessage);
+      
     } finally {
       set({ loading: false });
     }

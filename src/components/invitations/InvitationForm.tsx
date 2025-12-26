@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useAuthStore } from '@/stores/authStore';
 import { useInvitationStore } from '@/stores/invitationStore';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
-import { Mail, Copy, Check } from 'lucide-react';
+import { EmailPreview } from '@/components/invitations/EmailPreview';
+import { Mail, Copy, Check, Eye } from 'lucide-react';
 
 interface InvitationFormProps {
   isOpen: boolean;
@@ -11,6 +13,7 @@ interface InvitationFormProps {
 }
 
 export const InvitationForm = ({ isOpen, onClose }: InvitationFormProps) => {
+  const { profile } = useAuthStore();
   const { sendInvitation, loading, error, clearError } = useInvitationStore();
   const [formData, setFormData] = useState({
     email: '',
@@ -20,6 +23,7 @@ export const InvitationForm = ({ isOpen, onClose }: InvitationFormProps) => {
   const [formError, setFormError] = useState('');
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,168 +67,226 @@ export const InvitationForm = ({ isOpen, onClose }: InvitationFormProps) => {
     setFormError('');
     setInviteToken(null);
     setCopied(false);
+    setShowPreview(false);
     clearError();
     onClose();
   };
 
   const copyInviteLink = () => {
     if (inviteToken) {
-      const inviteUrl = `${window.location.origin}/accept-invite/${inviteToken}`;
+      const inviteUrl = `${window.location.origin}/invite/${inviteToken}`;
       navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  return (
-    <Modal
-      isOpen={isOpen}
-      title={inviteToken ? 'Invitation Sent!' : 'Send Invitation'}
-      onClose={handleClose}
-      size="lg"
-    >
-      {inviteToken ? (
-        <div className="space-y-4">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-            <div className="bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <Mail size={32} className="text-green-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Invitation Created Successfully!
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              The invitation has been created. Share this link with the recipient:
-            </p>
-          </div>
+  const handlePreviewEmail = () => {
+    // Validate required fields before showing preview
+    if (!formData.email.trim()) {
+      setFormError('Please enter an email address to preview');
+      return;
+    }
 
-          <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Invitation Link
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={`${window.location.origin}/accept-invite/${inviteToken}`}
-                readOnly
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm font-mono"
-              />
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setFormError('Please enter a valid email address to preview');
+      return;
+    }
+
+    setFormError('');
+    setShowPreview(true);
+  };
+
+  // Generate preview data
+  const getExpiryDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() + 7);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
+  const previewInviteUrl = inviteToken 
+    ? `${window.location.origin}/invite/${inviteToken}`
+    : `${window.location.origin}/invite/preview-token-123`;
+
+  return (
+    <>
+      <Modal
+        isOpen={isOpen}
+        title={inviteToken ? 'Invitation Sent!' : 'Send Invitation'}
+        onClose={handleClose}
+        size="lg"
+      >
+        {inviteToken ? (
+          <div className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+              <div className="bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <Mail size={32} className="text-green-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Invitation Created Successfully!
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                The invitation has been created. Share this link with the recipient:
+              </p>
+            </div>
+
+            <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Invitation Link
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={`${window.location.origin}/invite/${inviteToken}`}
+                  readOnly
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm font-mono"
+                />
+                <Button
+                  onClick={copyInviteLink}
+                  variant={copied ? 'success' : 'secondary'}
+                  size="md"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={16} className="mr-1" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={16} className="mr-1" />
+                      Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-gray-700">
+                <strong>Note:</strong> This invitation link will expire in 7 days. 
+                The recipient will need to use it before then to create their account.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
               <Button
-                onClick={copyInviteLink}
-                variant={copied ? 'success' : 'secondary'}
-                size="md"
+                onClick={handleClose}
+                variant="primary"
+                size="lg"
+                className="flex-1"
               >
-                {copied ? (
-                  <>
-                    <Check size={16} className="mr-1" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy size={16} className="mr-1" />
-                    Copy
-                  </>
-                )}
+                Done
+              </Button>
+              <Button
+                onClick={() => {
+                  setInviteToken(null);
+                  setCopied(false);
+                }}
+                variant="secondary"
+                size="lg"
+                className="flex-1"
+              >
+                Send Another
               </Button>
             </div>
           </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-gray-700">
-              <strong>Note:</strong> This invitation link will expire in 7 days. 
-              The recipient will receive an email with this link (email integration pending).
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              onClick={handleClose}
-              variant="primary"
-              size="lg"
-              className="flex-1"
-            >
-              Done
-            </Button>
-            <Button
-              onClick={() => {
-                setInviteToken(null);
-                setCopied(false);
-              }}
-              variant="secondary"
-              size="lg"
-              className="flex-1"
-            >
-              Send Another
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email Address"
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            placeholder="user@example.com"
-            required
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Role <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'seller' })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input
+              label="Email Address"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="user@example.com"
               required
-            >
-              <option value="seller">Seller - Can make sales and view inventory</option>
-              <option value="admin">Administrator - Full system access</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Personal Message (Optional)
-            </label>
-            <textarea
-              value={formData.message}
-              onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-              placeholder="Add a personal message for the recipient..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
-          </div>
 
-          {(formError || error) && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              {formError || error}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Role <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.role}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'seller' })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="seller">Seller - Can make sales and view inventory</option>
+                <option value="admin">Administrator - Full system access</option>
+              </select>
             </div>
-          )}
 
-          <div className="flex gap-3 pt-4">
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              isLoading={loading}
-              className="flex-1"
-            >
-              <Mail size={20} className="mr-2" />
-              Send Invitation
-            </Button>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Personal Message (Optional)
+              </label>
+              <textarea
+                value={formData.message}
+                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                placeholder="Add a personal message for the recipient..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+
+            {(formError || error) && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                {formError || error}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                onClick={handlePreviewEmail}
+                variant="secondary"
+                size="lg"
+                className="flex-1"
+              >
+                <Eye size={20} className="mr-2" />
+                Preview Email
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                isLoading={loading}
+                className="flex-1"
+              >
+                <Mail size={20} className="mr-2" />
+                Send Invitation
+              </Button>
+            </div>
+            
             <Button
               type="button"
               variant="secondary"
               onClick={handleClose}
               size="lg"
-              className="flex-1"
+              className="w-full"
             >
               Cancel
             </Button>
-          </div>
-        </form>
-      )}
-    </Modal>
+          </form>
+        )}
+      </Modal>
+
+      {/* Email Preview Modal */}
+      <EmailPreview
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        inviterName={profile?.full_name || 'Admin User'}
+        email={formData.email}
+        role={formData.role}
+        message={formData.message || undefined}
+        inviteUrl={previewInviteUrl}
+        expiryDate={getExpiryDate()}
+      />
+    </>
   );
 };

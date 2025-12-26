@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're Invited to Join Our POS System</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f3f4f6;
+      line-height: 1.6;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+    }
+    .email-header {
+      background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+      padding: 40px 30px;
+      text-align: center;
+    }
+    .email-logo {
+      font-size: 32px;
+      font-weight: bold;
+      color: #ffffff;
+      margin: 0;
+      text-decoration: none;
+    }
+    .email-body {
+      padding: 40px 30px;
+      color: #1f2937;
+    }
+    .greeting {
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0 0 20px 0;
+      color: #111827;
+    }
+    .invitation-text {
+      font-size: 16px;
+      margin: 0 0 30px 0;
+      color: #4b5563;
+    }
+    .role-badge {
+      display: inline-block;
+      padding: 8px 16px;
+      border-radius: 9999px;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 10px 0 20px 0;
+    }
+    .role-admin {
+      background-color: #fef3c7;
+      color: #92400e;
+    }
+    .role-seller {
+      background-color: #dbeafe;
+      color: #1e40af;
+    }
+    .cta-button {
+      display: inline-block;
+      padding: 16px 32px;
+      background-color: #2563eb;
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      margin: 20px 0;
+      transition: background-color 0.2s;
+    }
+    .cta-button:hover {
+      background-color: #1e40af;
+    }
+    .info-box {
+      background-color: #eff6ff;
+      border-left: 4px solid #2563eb;
+      padding: 16px;
+      margin: 30px 0;
+      border-radius: 4px;
+    }
+    .info-box-title {
+      font-weight: 600;
+      color: #1e40af;
+      margin: 0 0 8px 0;
+    }
+    .info-box-text {
+      margin: 0;
+      color: #1e3a8a;
+      font-size: 14px;
+    }
+    .personal-message {
+      background-color: #f9fafb;
+      border: 1px solid #e5e7eb;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-style: italic;
+      color: #4b5563;
+    }
+    .expiry-notice {
+      background-color: #fef3c7;
+      border: 1px solid #fbbf24;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-size: 14px;
+      color: #92400e;
+    }
+    .alt-link {
+      margin-top: 20px;
+      padding: 16px;
+      background-color: #f9fafb;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #6b7280;
+      word-break: break-all;
+    }
+    .alt-link-label {
+      font-weight: 600;
+      color: #374151;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .email-footer {
+      background-color: #f9fafb;
+      padding: 30px;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+      font-size: 14px;
+      color: #6b7280;
+    }
+    .footer-links {
+      margin: 15px 0;
+    }
+    .footer-link {
+      color: #2563eb;
+      text-decoration: none;
+      margin: 0 10px;
+    }
+    .footer-link:hover {
+      text-decoration: underline;
+    }
+    @media only screen and (max-width: 600px) {
+      .email-body {
+        padding: 30px 20px;
+      }
+      .email-header {
+        padding: 30px 20px;
+      }
+      .greeting {
+        font-size: 20px;
+      }
+      .cta-button {
+        display: block;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <!-- Header -->
+    <div class="email-header">
+      <h1 class="email-logo">🏪 POS System</h1>
+    </div>
+
+    <!-- Body -->
+    <div class="email-body">
+      <h2 class="greeting">You're Invited! 🎉</h2>
+      
+      <p class="invitation-text">
+        <strong>{{inviterName}}</strong> has invited you to join the POS & Inventory Management System.
+      </p>
+
+      <p class="invitation-text">
+        You've been assigned the role of:
+      </p>
+
+      <span class="role-badge {{roleClass}}">
+        {{roleDisplay}}
+      </span>
+
+      {{#if message}}
+      <div class="personal-message">
+        "{{message}}"
+      </div>
+      {{/if}}
+
+      <div style="text-align: center; margin: 40px 0;">
+        <a href="{{inviteUrl}}" class="cta-button">
+          Accept Invitation & Create Account
+        </a>
+      </div>
+
+      <div class="info-box">
+        <p class="info-box-title">What happens next?</p>
+        <p class="info-box-text">
+          Click the button above to create your account. You'll be able to set your password and start using the system immediately.
+        </p>
+      </div>
+
+      <div class="expiry-notice">
+        ⏰ <strong>Important:</strong> This invitation expires on {{expiryDate}}. Please accept it before then.
+      </div>
+
+      <!-- Alternative Link -->
+      <div class="alt-link">
+        <span class="alt-link-label">If the button doesn't work, copy and paste this link:</span>
+        {{inviteUrl}}
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="email-footer">
+      <p style="margin: 0 0 10px 0;">
+        This invitation was sent to <strong>{{email}}</strong>
+      </p>
+      
+      <div class="footer-links">
+        <a href="mailto:support@yourcompany.com" class="footer-link">Contact Support</a>
+        <span style="color: #d1d5db;">|</span>
+        <a href="https://yourcompany.com/help" class="footer-link">Help Center</a>
+      </div>
+
+      <p style="margin: 15px 0 0 0; font-size: 12px; color: #9ca3af;">
+        © 2024 POS System. All rights reserved.
+      </p>
+
+      <p style="margin: 10px 0 0 0; font-size: 12px; color: #9ca3af;">
+        If you didn't expect this invitation, you can safely ignore this email.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+
+<!-- ---
+
+## Template Variables
+
+This template uses the following variables (will be replaced when sending):
+
+- `{{inviterName}}` - Name of person who sent the invitation
+- `{{email}}` - Recipient's email address
+- `{{roleClass}}` - CSS class for role badge (`role-admin` or `role-seller`)
+- `{{roleDisplay}}` - Display name of role (`Administrator` or `Seller`)
+- `{{message}}` - Optional personal message
+- `{{inviteUrl}}` - Full invitation URL with token
+- `{{expiryDate}}` - Formatted expiration date
+
+---
+
+## Visual Preview
+
+The email will look like this:
+```
+┌────────────────────────────────────────┐
+│   [Blue Gradient Header]               │
+│   🏪 POS System                        │
+└────────────────────────────────────────┘
+│                                        │
+│   You're Invited! 🎉                  │
+│                                        │
+│   John Doe has invited you to join    │
+│   the POS & Inventory Management       │
+│   System.                              │
+│                                        │
+│   You've been assigned the role of:   │
+│   [Administrator Badge]                │
+│                                        │
+│   [Personal Message Box if provided]  │
+│                                        │
+│   [Accept Invitation Button - Blue]   │
+│                                        │
+│   ┌────────────────────────────────┐  │
+│   │ What happens next?             │  │
+│   │ Click the button above to...   │  │
+│   └────────────────────────────────┘  │
+│                                        │
+│   ⏰ This invitation expires on...    │
+│                                        │
+│   If button doesn't work:             │
+│   https://yourapp.com/invite/token    │
+│                                        │
+└────────────────────────────────────────┘
+│   [Footer - Gray Background]           │
+│   Contact Support | Help Center        │
+│   © 2024 POS System                    │
+└────────────────────────────────────────┘ -->

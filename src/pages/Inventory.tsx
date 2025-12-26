@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useProductStore } from '@/stores/productStore';
 import { useAuthStore } from '@/stores/authStore';
-import { Product, Category, Supplier } from '@/lib/types';
+import { Product } from '@/lib/types';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Modal } from '@/components/common/Modal';
