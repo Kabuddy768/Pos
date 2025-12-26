@@ -198,7 +198,7 @@ export const useInvitationStore = create<InvitationState>((set, get) => ({
       // Create invitation
       const { data: _invitation, error: inviteError } = await supabase
         .from('user_invitations')
-        .cd ([{
+        .insert([{
           email,
           role,
           invited_by: user.id,
