@@ -12,6 +12,11 @@ env:
   NODE_VERSION: '20'
   SUPABASE_PROJECT_ID: 'cmxaayivtseronirqwec'
 
+# ADD THIS SECTION 👇
+permissions:
+  contents: write
+# -----------------
+
 jobs:
   # Job 1: Run tests and linting
   test:
