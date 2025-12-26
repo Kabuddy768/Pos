@@ -43,7 +43,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
-  # Job 2: Apply database migrations
+  # Job 2: Apply database migrations (WITH AUTO-SYNC)
   migrate:
     name: Apply Database Migrations
     runs-on: ubuntu-latest
@@ -53,6 +53,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # CRITICAL: Get full git history for proper commits
+          fetch-depth: 0
+          # Use PAT token to allow pushing back to repo
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
@@ -65,15 +70,78 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      - name: Pull remote migrations FIRST (prevent sync issues)
+        run: |
+          echo "🔄 Pulling remote migrations to sync with database..."
+          supabase db pull
+          
+          echo "📋 Migration status after pull:"
+          supabase migration list
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Validate migration filenames
+        run: |
+          echo "🔍 Validating migration filenames..."
+          
+          invalid_count=0
+          for file in supabase/migrations/*.sql; do
+            basename=$(basename "$file")
+            
+            # Check for whitespace
+            if [[ "$basename" =~ ^[[:space:]] ]] || [[ "$basename" =~ [[:space:]]$ ]]; then
+              echo "❌ Invalid: $basename (has whitespace)"
+              invalid_count=$((invalid_count + 1))
+            # Check format: 14-digit timestamp + underscore + name + .sql
+            elif ! [[ "$basename" =~ ^[0-9]{14}_[a-z0-9_]+\.sql$ ]]; then
+              echo "❌ Invalid: $basename (wrong format)"
+              invalid_count=$((invalid_count + 1))
+            fi
+          done
+          
+          if [ $invalid_count -gt 0 ]; then
+            echo "❌ Found $invalid_count invalid migration file(s)"
+            echo "Fix filenames to match: <timestamp>_<name>.sql"
+            exit 1
+          fi
+          
+          echo "✅ All migration filenames are valid"
+
       - name: Apply database migrations
         run: |
+          echo "📤 Pushing local migrations to remote database..."
           supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      - name: Check migration status
+      - name: Commit pulled migrations back to repo
         run: |
-          supabase db remote commit
+          # Configure git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Add migration files
+          git add supabase/migrations/
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "✅ No new migrations to commit"
+          else
+            echo "📦 Committing pulled migrations..."
+            git commit -m "chore: sync remote migrations from deployment [skip ci]"
+            
+            echo "⬆️  Pushing to GitHub..."
+            git push origin main
+            
+            echo "✅ Migrations synced back to repository"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Final migration status
+        run: |
+          echo "📊 Final migration status:"
+          supabase migration list
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
@@ -81,7 +149,7 @@ jobs:
   deploy-functions:
     name: Deploy Supabase Edge Functions
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [test, migrate]
     # Only run on main branch pushes
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
@@ -102,12 +170,15 @@ jobs:
 
       - name: Deploy Edge Functions
         run: |
+          echo "🚀 Deploying Edge Functions..."
           supabase functions deploy send-invitation-email
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Set Edge Function secrets
-        run: supabase secrets set RESEND_API_KEY="${{ secrets.RESEND_API_KEY }}"
+        run: |
+          echo "🔐 Setting Edge Function secrets..."
+          supabase secrets set RESEND_API_KEY="${{ secrets.RESEND_API_KEY }}"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
@@ -123,8 +194,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-        # --- NEW STEP: Install pnpm ---
-      - uses: pnpm/action-setup@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 9
 
@@ -142,16 +213,21 @@ jobs:
 
       - name: Build Project Artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Deploy to Vercel (Production)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
+          echo "🚀 Deploying to Vercel (Production)..."
           vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} > deployment-url.txt
           echo "DEPLOYMENT_URL=$(cat deployment-url.txt)" >> $GITHUB_ENV
 
       - name: Deploy to Vercel (Preview)
         if: github.event_name == 'pull_request'
         run: |
+          echo "🚀 Deploying to Vercel (Preview)..."
           vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} > deployment-url.txt
           echo "DEPLOYMENT_URL=$(cat deployment-url.txt)" >> $GITHUB_ENV
 
@@ -176,22 +252,22 @@ jobs:
           echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
 
-#   # Job 5: Notify on Slack (optional)
-#   notify:
-#     name: Send Slack Notification
-#     runs-on: ubuntu-latest
-#     needs: [deploy]
-#     if: always() && github.ref == 'refs/heads/main'
-    
-#     steps:
-#       - name: Slack Notification
-#         uses: 8398a7/action-slack@v3
-#         if: secrets.SLACK_WEBHOOK != '' 
-#         env:
-#           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-#         with:
-#           status: ${{ job.status }}
-#           text: |
-#             🚀 POS System Deployment ${{ job.status }}
-#             Branch: ${{ github.ref_name }}
-#             Commit: ${{ github.event.head_commit.message }}
+  # Job 5: Notify on Slack (optional - uncomment to enable)
+  # notify:
+  #   name: Send Slack Notification
+  #   runs-on: ubuntu-latest
+  #   needs: [deploy]
+  #   if: always() && github.ref == 'refs/heads/main'
+  #   
+  #   steps:
+  #     - name: Slack Notification
+  #       uses: 8398a7/action-slack@v3
+  #       if: env.SLACK_WEBHOOK_URL != ''
+  #       env:
+  #         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+  #       with:
+  #         status: ${{ job.status }}
+  #         text: |
+  #           🚀 POS System Deployment ${{ job.status }}
+  #           Branch: ${{ github.ref_name }}
+  #           Commit: ${{ github.event.head_commit.message }}
