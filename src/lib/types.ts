@@ -149,3 +149,12 @@ export interface ProfitLossReport {
     margin: number;
   }>;
 }
+
+// Add to the bottom of your types.ts file
+declare module 'jspdf' {
+  interface jsPDF {
+    lastAutoTable: {
+      finalY: number;
+    };
+  }
+}

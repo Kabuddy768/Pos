@@ -8,6 +8,7 @@ import { Modal } from '@/components/common/Modal';
 import { SearchBar } from '@/components/common/SearchBar';
 import { Plus, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '@/utils/formatters';
+import { AddCategoryModal, AddSupplierModal } from '@/components/inventory/CategorySupplierModals';
 
 export const Inventory = () => {
   const { profile } = useAuthStore();
@@ -40,6 +41,9 @@ export const Inventory = () => {
     quantity: 0,
     reorder_point: 10,
   });
+
+const [showCategoryModal, setShowCategoryModal] = useState(false);
+const [showSupplierModal, setShowSupplierModal] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -282,6 +286,21 @@ export const Inventory = () => {
                     </option>
                   ))}
                 </select>
+                <Button
+                  onClick={() => setShowCategoryModal(true)}
+                  variant="secondary"
+                  size="md"
+                  type="button"
+                >
+                  <Plus size={18} />
+                </Button>
+                <AddCategoryModal
+                  isOpen={showCategoryModal}
+                  onClose={() => setShowCategoryModal(false)}
+                  onSuccess={() => {
+                    fetchCategories(); // Refresh categories list
+                  }}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
@@ -297,6 +316,21 @@ export const Inventory = () => {
                     </option>
                   ))}
                 </select>
+                <Button
+                  onClick={() => setShowSupplierModal(true)}
+                  variant="secondary"
+                  size="md"
+                  type="button"
+                >
+                  <Plus size={18} />
+                </Button>
+                <AddSupplierModal
+                  isOpen={showSupplierModal}
+                  onClose={() => setShowSupplierModal(false)}
+                  onSuccess={() => {
+                    fetchSuppliers(); // Refresh suppliers list
+                  }}
+                />
               </div>
             </div>
 

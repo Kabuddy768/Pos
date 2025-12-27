@@ -3,13 +3,24 @@ import { useAuthStore } from '@/stores/authStore';
 import { useProductStore } from '@/stores/productStore';
 import { useCartStore } from '@/stores/cartStore';
 import { supabase } from '@/lib/supabase';
-import { CartItem, Product } from '@/lib/types';
+// Assuming Sale and SaleItem are exported from types, if not you may need to add them or use 'any'
+import { CartItem, Product, Sale, SaleItem } from '@/lib/types';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Modal } from '@/components/common/Modal';
 import { SearchBar } from '@/components/common/SearchBar';
-import { Plus, Minus, Trash2, Check } from 'lucide-react';
 import { formatCurrency } from '@/utils/formatters';
+import { downloadReceipt, printReceipt } from '@/utils/receiptGenerator';
+// Consolidated Icon imports
+import { 
+  Plus, 
+  Minus, 
+  Trash2, 
+  Check, 
+  Download, 
+  Printer, 
+  CheckCircle 
+} from 'lucide-react';
 
 export const POS = () => {
   const { profile } = useAuthStore();
@@ -29,6 +40,12 @@ export const POS = () => {
     getTaxAmount,
     getTotal,
   } = useCartStore();
+
+  // State for the success modal and receipt data
+  const [completedSale, setCompletedSale] = useState<{
+    sale: Sale;
+    items: SaleItem[];
+  } | null>(null);
 
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,6 +93,7 @@ export const POS = () => {
     }
   };
 
+  // Updated Payment Processor
   const handleProcessPayment = async () => {
     if (items.length === 0) {
       alert('Cart is empty');
@@ -84,6 +102,7 @@ export const POS = () => {
 
     setProcessingPayment(true);
     try {
+      // Create sale
       const { data: sale, error: saleError } = await supabase
         .from('sales')
         .insert([
@@ -94,8 +113,8 @@ export const POS = () => {
             subtotal: getSubtotal(),
             discount_amount: getDiscountAmount(),
             discount_percentage: discountPercentage,
-            // tax_amount: getTaxAmount(),
-            // tax_percentage: taxPercentage,
+            tax_amount: getTaxAmount(),
+            // tax_percentage: taxPercentage, // Uncomment if your DB schema supports this
             total_amount: getTotal(),
             payment_method: paymentMethod,
             payment_reference: paymentReference || null,
@@ -106,7 +125,8 @@ export const POS = () => {
 
       if (saleError) throw saleError;
 
-      const saleItems = items.map((item) => ({
+      // Create sale items
+      const saleItemsToInsert = items.map((item) => ({
         sale_id: sale.id,
         product_id: item.product_id,
         product_name: item.product_name,
@@ -117,28 +137,64 @@ export const POS = () => {
         cost_price: item.cost_price,
       }));
 
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(saleItems);
+       // Insert and get back complete sale items with id and created_at
+    const { data: insertedItems, error: itemsError } = await supabase
+      .from('sale_items')
+      .insert(saleItemsToInsert)
+      .select(); // ← Add .select() to get back the inserted items
+
 
       if (itemsError) throw itemsError;
 
-      alert(`Sale #${sale.transaction_number} completed successfully!`);
+      // Store completed sale for receipt generation
+      setCompletedSale({
+        sale,
+        items: insertedItems || [],
+      });
 
-      clear();
+      // Close payment modal
+      setShowPaymentModal(false);
+
+      // Clear form inputs (but not the cart yet, wait for "New Sale")
       setPaymentMethod('cash');
       setPaymentReference('');
       setCustomerName('');
       setCustomerPhone('');
       setDiscount(0);
       setTax(0);
-      setShowPaymentModal(false);
+      
     } catch (error) {
       console.error('Payment error:', error);
       alert('Failed to process payment');
     } finally {
       setProcessingPayment(false);
     }
+  };
+
+  // Receipt Actions
+  const handleDownloadReceipt = () => {
+    if (!completedSale) return;
+    
+    downloadReceipt({
+      sale: completedSale.sale,
+      items: completedSale.items,
+      seller: profile || undefined,
+    });
+  };
+
+  const handlePrintReceipt = () => {
+    if (!completedSale) return;
+    
+    printReceipt({
+      sale: completedSale.sale,
+      items: completedSale.items,
+      seller: profile || undefined,
+    });
+  };
+
+  const handleNewSale = () => {
+    clear(); // Clear cart logic from store
+    setCompletedSale(null); // Close success modal
   };
 
   return (
@@ -304,6 +360,7 @@ export const POS = () => {
         </div>
       </div>
 
+      {/* Payment Processing Modal */}
       <Modal
         isOpen={showPaymentModal}
         title="Complete Payment"
@@ -371,6 +428,92 @@ export const POS = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Success / Receipt Modal */}
+      {completedSale && (
+        <Modal
+          isOpen={true}
+          title="Sale Completed Successfully!"
+          onClose={handleNewSale}
+          size="md"
+        >
+          <div className="space-y-6">
+            {/* Success Icon */}
+            <div className="flex justify-center">
+              <div className="bg-green-100 rounded-full p-4">
+                <CheckCircle size={48} className="text-green-600" />
+              </div>
+            </div>
+
+            {/* Transaction Details */}
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Transaction #:</span>
+                <span className="font-semibold text-gray-900">
+                  {completedSale.sale.transaction_number}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Amount:</span>
+                <span className="font-bold text-xl text-green-600">
+                  {formatCurrency(completedSale.sale.total_amount)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Payment Method:</span>
+                <span className="font-semibold text-gray-900">
+                  {completedSale.sale.payment_method.toUpperCase()}
+                </span>
+              </div>
+              {completedSale.sale.customer_name && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Customer:</span>
+                  <span className="font-semibold text-gray-900">
+                    {completedSale.sale.customer_name}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <Button
+                onClick={handleDownloadReceipt}
+                variant="primary"
+                size="lg"
+                className="w-full flex items-center justify-center gap-2"
+              >
+                <Download size={20} />
+                Download Receipt
+              </Button>
+
+              <Button
+                onClick={handlePrintReceipt}
+                variant="secondary"
+                size="lg"
+                className="w-full flex items-center justify-center gap-2"
+              >
+                <Printer size={20} />
+                Print Receipt
+              </Button>
+
+              <Button
+                onClick={handleNewSale}
+                variant="success"
+                size="lg"
+                className="w-full"
+              >
+                Start New Sale
+              </Button>
+            </div>
+
+            {/* Info Text */}
+            <p className="text-sm text-gray-600 text-center">
+              Receipt can be reprinted from Reports section
+            </p>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
